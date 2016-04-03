@@ -31,7 +31,7 @@ backuplist ={'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK',
 
 def getWebpages():
     logger.info('getting webpages')
-    BlotterURL = 'http://www.google.com'
+    BlotterURL = 'http://ws.ocsd.org/Blotter/BlotterSearch.aspx'
     blotback ="http://ws.ocsd.org/Blotter/BlotterSearch.aspx"
 
     r = requests.get(BlotterURL)
