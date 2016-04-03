@@ -1,0 +1,11 @@
+deploy:
+  provider: s3
+  access_key_id: AKIAJBU7TGSFRPMNBKSQ
+  secret_access_key:
+    secure: R+VOD3mbQrTCisXlR7I3aIt8LIr3MDtPgp+DVBHLq02U13Tzg+pQM5yzNrFn1+I+Xa6E37/smoXx0LfNBVYz8oQAOAzDe0g/grNpAvgnINYWUdQ9sT6xwO5KL+UjCagng5EjTYTmQpuQuU06624QS6TdHi4swuxleY6tKj4rUEoHez2gXxjqeRXBPuGZLIRbC16277RFnS2fXoOOna0cJq0pip710rTbV59h5wjD+EXxoKoWQWowsS84P/pZ0/Iv0FhPKEJkHclgk+ILzGuCtnr2cxW6vgMieZBrM1/xclpfbQU6h3eT097VUr9wFGK1zK4DFxY/E9fKhTlD5UzySb77PpvlYJ1UuRisTbz2PJyS657i7QBLgjVA+zmgIUpYrD4lazc7SH5I0d9xsgA5M5JaRPzKnV9ETV6hLmExk0cdcaoAhW0vjVzrxFNQkFyYYtX9fAgjl3EsKGt7+PEpwl9ILB4jIFH4hfErAjpyT9OQkusrdYDID5EzrWmZmgQbcdipUqnB9vZChvr0mq9xiCOoovGR+8Jhczvcvb+sxbZULGl6dp8IeY+MH8Qrhw2dI8wO2v8jd8cqrAPLhfMgjA7b8G4cSAa7pzhe7KXgGlFqOoSVrHFlvWg7L1JUPgA9j22KjOrOMhr9I/2N5byZ2YRYSPXMOJCE4gUoQtctNa8=
+  bucket: blotblotblot
+  local-dir: "/home/matt/PycharmProjects/LambdaOCParse"
+  upload-dir: OC-CA Parser/Script
+  acl: private
+  on:
+    repo: Sperryfreak01/LambdaOCParse

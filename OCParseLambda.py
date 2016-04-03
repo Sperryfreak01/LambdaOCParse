@@ -9,30 +9,32 @@ import logging
 import json
 import pymysql
 import grequests
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+logging.info('Starting BLOTblotBLOT')
 logger = logging.getLogger(__name__)
 
 db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@chaosnet.cdl9bdsmtzxw.us-west-2.rds.amazonaws.com:3306/BlotBlotBlot')
 print('db connected')
 
 
-cityList = {'AV':'ALISO VIEJO'}
-backuplist ={'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
-            'CS':'ORANGE COUNTY', 'CM':'COSTA MESA', 'CZ':'COTO DE CAZA', 'ON':'ORANGE COUNTY',
-            'OS':'ORANGE COUNTY', 'CY':'CYPRESS', 'DP':'DANA POINT', 'DH':'DANA POINT', 'FA':'ORANGE COUNTY',
-            'FV':'FOUNTAIN VALLEY', 'FU':'FULLERTON', 'GG':'GARDEN GROVE', 'HB':'HUNTINGTON BEACH', 'IR':'IRVINE',
-            'JW':'JOHN WAYNE AIRPORT', 'LR':'LA HABRA', 'LM':'LA MIRADA', 'LP':'LA PALMA', 'LD':'LADERA RANCH',
-            'LB':'LAGUNA BEACH', 'LH':'LAGUNA HILLS', 'LN':'LAGUNA NIGUEL', 'LW':'LAGUNA WOODS', 'LF':'LAKE FOREST',
-            'FL':'LAS FLORES', 'LA':'LOS ALAMITOS', 'MC':'MIDWAY CITY', 'MV':'MISSION VIEJO', 'NB':'NEWPORT BEACH',
-            'NH':'NEWPORT BEACH', 'OR':'ORANGE', 'OC':'ORANGE COUNTY', 'PL':'PLACENTIA',
-            'RV':'RANCHO MISSION VIEJO', 'RS':'RANCHO SANTA MARGARITA','RO':'ROSSMOOR', 'SC':'SAN CLEMENTE',
-            'SJ':'SAN JUAN CAPISTRANO', 'SA':'SANTA ANA', 'SB':'SEAL BEACH', 'SI':'SILVERADO CANYON', 'ST':'STANTON',
-            'SN':'SUNSET BEACH', 'TC':'TRABUCO CANYON', 'TU':'TUSTIN', 'VP':'VILLA PARK', 'WE':'WESTMINSTER',
-            'YL':'YORBA LINDA'}
+cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
+           'CS':'ORANGE COUNTY', 'CM':'COSTA MESA', 'CZ':'COTO DE CAZA', 'ON':'ORANGE COUNTY',
+           'OS':'ORANGE COUNTY', 'CY':'CYPRESS', 'DP':'DANA POINT', 'DH':'DANA POINT', 'FA':'ORANGE COUNTY',
+           'FV':'FOUNTAIN VALLEY', 'FU':'FULLERTON', 'GG':'GARDEN GROVE', 'HB':'HUNTINGTON BEACH', 'IR':'IRVINE',
+           'JW':'JOHN WAYNE AIRPORT', 'LR':'LA HABRA', 'LM':'LA MIRADA', 'LP':'LA PALMA', 'LD':'LADERA RANCH',
+           'LB':'LAGUNA BEACH', 'LH':'LAGUNA HILLS', 'LN':'LAGUNA NIGUEL', 'LW':'LAGUNA WOODS', 'LF':'LAKE FOREST',
+           'FL':'LAS FLORES', 'LA':'LOS ALAMITOS', 'MC':'MIDWAY CITY', 'MV':'MISSION VIEJO', 'NB':'NEWPORT BEACH',
+           'NH':'NEWPORT BEACH', 'OR':'ORANGE', 'OC':'ORANGE COUNTY', 'PL':'PLACENTIA',
+           'RV':'RANCHO MISSION VIEJO', 'RS':'RANCHO SANTA MARGARITA','RO':'ROSSMOOR', 'SC':'SAN CLEMENTE',
+           'SJ':'SAN JUAN CAPISTRANO', 'SA':'SANTA ANA', 'SB':'SEAL BEACH', 'SI':'SILVERADO CANYON', 'ST':'STANTON',
+           'SN':'SUNSET BEACH', 'TC':'TRABUCO CANYON', 'TU':'TUSTIN', 'VP':'VILLA PARK', 'WE':'WESTMINSTER',
+           'YL':'YORBA LINDA'}
 
-def getWebpages():
-    logger.info('getting webpages')
+
+def getWebpages(city):
+    logger.info('getting webpage headers')
     BlotterURL = 'http://ws.ocsd.org/Blotter/BlotterSearch.aspx'
-    blotback ="http://ws.ocsd.org/Blotter/BlotterSearch.aspx"
 
     r = requests.get(BlotterURL)
 
@@ -68,26 +70,25 @@ def getWebpages():
         'cookie': "ASP.NET_SessionId=a0ooc555m13vlofbtiljc055",
         'cache-control': "no-cache",
         }
-    cityIndex = []
-    payloads = []
-    for city in cityList:
-        payloads.append({'SortBy': '',
-                           '__EVENTARGUMENT': '',
-                           '__EVENTTARGET': '',
-                           '__EVENTVALIDATION': EventValidation,
-                           '__SCROLLPOSITIONX': '0',
-                           '__SCROLLPOSITIONY': '0',
-                           '__VIEWSTATE': ViewState,
-                            '__VIEWSTATEGENERATOR': ViewStateGen,
-                           'btn7Days.x': '15',
-                           'btn7Days.y': '8',
-                           'ddlCity': city
-                        })
-        cityIndex.append(city)
-        responses = requests.post(BlotterURL, data=payload, headers=headers)
+
+    payload ={'SortBy': '',
+               '__EVENTARGUMENT': '',
+               '__EVENTTARGET': '',
+               '__EVENTVALIDATION': EventValidation,
+               '__SCROLLPOSITIONX': '0',
+               '__SCROLLPOSITIONY': '0',
+               '__VIEWSTATE': ViewState,
+                '__VIEWSTATEGENERATOR': ViewStateGen,
+               'btn7Days.x': '15',
+               'btn7Days.y': '8',
+               'ddlCity': city
+                }
+
+    logger.info('getting webpage headers')
+    response = requests.post(BlotterURL, data=payload, headers=headers)
     #responses = grequests.map(request)
-    logger.info('got a bunch of webpages')
-    return responses, cityIndex
+    logger.info('got the webpage for %s' % city)
+    return response
 
 
 def getLocation(textLocation, city):
@@ -107,7 +108,7 @@ def getLocation(textLocation, city):
 
 
 def crimeParser(db, response, city):
-    logger.info('going through %s' % city)
+    logger.info('Parsing through %s' % city)
     getNotes = False
     noteCaseNum = ''
 
@@ -138,11 +139,13 @@ def crimeParser(db, response, city):
             # Check to see if the incident we are processing is already in the db
             exist = db.query('SELECT CaseNumber FROM Incidents WHERE CaseNumber=:CaseNum', CaseNum=CaseNum)
             exist = exist.all(as_dict=True)
+            print('checking the db to see if %s exsists, got %s' %(CaseNum, exist))
             if not exist:
+                print('Case number not in DB')
                 # Arrest parsing
                 if 'Arrest Info' in Description:
                     logging.debug('subject in case Number: %s arrested' % CaseNum)
-                    arrestparse(db, CaseNum)
+                    #arrestparse(db, CaseNum)
                     arrested = 1
                 else:
                     arrested = 0
@@ -159,8 +162,8 @@ def crimeParser(db, response, city):
 
                # Logging the incident to the database
                 lat, lon, confidence = getLocation(IncidentLocation, cityList[city])
-                db.query('INSERT INTO Incidents (CaseNumber, Incident, Location, "Date", Lat, Lon, City, CONFIDENCE, Aresst) VALUES (:CaseNum, :Description, :IncidentLocation, :IncidentDate, :lat, :lon, :city, :confidence, :arrested)',
-                          CaseNum=CaseNum, Description=Description, IncidentLocation=IncidentLocation, IncidentDate=trimmeddate, lat=lat, lon=lon, city=city, confidence=confidence, arrested=arrested)
+                db.query('INSERT INTO Incidents (CaseNumber, incidentdescription, location, incidentdate,lat, lon, city, confidence, arrest) VALUES(:CaseNum,:Description, :IncidentLocation, :IncidentDate, :lat, :lon, :city, :confidence, :arrested)',
+                          CaseNum=CaseNum, Description=Description, IncidentLocation=IncidentLocation, IncidentDate=trimmeddate, lat=lat, lon=lon, city=city, confidence=confidence, arrested=arrested,)
 
             else:
                 logger.debug('the case number already exists in the DB, case: %s, city:%s' % (CaseNum, cityList[city]))
@@ -176,25 +179,23 @@ def crimeParser(db, response, city):
         if row.attrs[0] == (u'id', u'trNotes') and getNotes:
             #cells = row.findAll("td")
             notes = row.getText()
-            exist = db.query('SELECT Notes FROM Incidents WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum)
+            exist = db.query('SELECT notes FROM Incidents WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum)
             exist = exist.all(as_dict=True)
             if not exist:
                 logger.debug('db has no notes')
                 logger.debug('scrapped notes say: %s' % notes)
-                db.query('UPDATE Incidents SET Notes=:note WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum, note=notes)
-            elif exist[0]['Notes'] == notes:
+                db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum, note=notes)
+            elif exist[0]['notes'] == notes:
                 logger.debug('scrapped notes say: %s' % notes)
                 logger.debug('notes are up to date')
             else:
                 logger.debug('notes out of date')
-                logger.debug('scrapped notes say: %s \n db says: %s' % (notes, exist[0]['Notes']))
-                db.query('UPDATE Incidents SET Notes=:note WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum, note=notes)
+                logger.debug('scrapped notes say: %s \n db says: %s' % (notes, exist[0]['notes']))
+                db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum, note=notes)
 
 
 def databaseupdate(db):
     webpages, cityIndex  = getWebpages()
-    #threads = [gevent.spawn(crimeParser, db, response, city) for response, city in zip(webpages, cityIndex)]
-    #gevent.joinall(threads)
     for response, city in zip(webpages, cityIndex):
         crimeParser(db, response, city)
 
@@ -227,8 +228,8 @@ def arrestparse(db, casenumber):
 
     if 'ERROR - This page cannot be displayed at this time.' in soup.getText():
         logger.warning('error on page while parseing case# %s \n%s' % (casenumber, soup.getText()))
-        sql = '''INSERT INTO Arrests (CaseNumber, Name, DOB, Sex, Race, Status, Height, Bail, Weight, Hair, Location,
-                 Eye, Occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail, :weight, :hair,
+        sql = '''INSERT INTO Arrests (casenumber, arrestname, dob, sex, race, arreststatus, height, bail, weight, hair, location,
+                 eye, occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail, :weight, :hair,
                  :location, :eye, :occupation)
               '''
         db.query(sql, casenum=casenumber, name=name, dob=dob, sex=sex, race=race, status=status, height=height,
@@ -282,14 +283,14 @@ def arrestparse(db, casenumber):
                 logger.debug('%s %s' % (cell.getText(), next.getText().replace("&nbsp;", "")))
 
     logger.debug('inserting new arrest info %s' % casenumber)
-    sql = '''INSERT INTO Arrests (CaseNumber, Name, DOB, Sex, Race, Status, Height, Bail, Weight, Hair, Location,
-             Eye, Occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail, :weight, :hair,
-             :location, :eye, :occupation)
-            '''
 
-    db.query(sql, casenum=casenumber, name=name, dob=dob, sex=sex, race=race, status=status, height=height, bail=bail,
-             weight=weight, hair=hair, location=location, eye=eye, occupation=occupation
-             )
+    db.query('''INSERT INTO Arrests (casenumber, arrestname, dob, sex, race, arreststatus, height, bail, weight, hair, location,
+                 eye, occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail, :weight, :hair,
+                 :location, :eye, :occupation)
+              ''',
+             casenum=casenumber, name=name, dob=dob, sex=sex, race=race, status=status, height=height,
+             bail=bail, weight=weight, hair=hair, location=location, eye=eye, occupation=occupation )
+
     return
 
 
@@ -297,14 +298,19 @@ print('Loading function')
 
 
 def lambda_handler(event, context):
+    print(event)
     #print("Received event: " + json.dumps(event, indent=2))
     #print("value1 = " + event['key1'])
     #print("value2 = " + event['key2'])
     #print("value3 = " + event['key3'])
     #return event['key1']  # Echo back the first key value
     #raise Exception('Something went wrong')
-    databaseupdate(db)
+    #databaseupdate(db)
+    webpage = getWebpages('AN')
+    #for response, city in zip(webpages, cityIndex):
+    #    crimeParser(db, response, city)
+    crimeParser(db, webpage, 'AN')
+#    db.close()
 
 
-lambda_handler(None, None)
-db.close()
+
