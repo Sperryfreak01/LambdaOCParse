@@ -6,9 +6,8 @@ import sys
 from BeautifulSoup import BeautifulSoup
 import datetime
 import logging
-import json
 import pymysql
-import grequests
+
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 logging.info('Starting BLOTblotBLOT')
@@ -298,7 +297,8 @@ print('Loading function')
 
 
 def lambda_handler(event, context):
-    print(event)
+    print('lambda event = %s' %event)
+
     #print("Received event: " + json.dumps(event, indent=2))
     #print("value1 = " + event['key1'])
     #print("value2 = " + event['key2'])
