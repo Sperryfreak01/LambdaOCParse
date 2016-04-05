@@ -7,6 +7,7 @@ from BeautifulSoup import BeautifulSoup
 import datetime
 import logging
 import pymysql
+import nose-exclude
 
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
