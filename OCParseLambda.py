@@ -14,7 +14,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 logging.info('Starting BLOTblotBLOT')
 logger = logging.getLogger(__name__)
 
-db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@chaosnet.cdl9bdsmtzxw.us-west-2.rds.amazonaws.com:3306/BlotBlotBlot')
+db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@192.168.5.185:3306/BlotBlotBlot')
 print('db connected')
 
 
