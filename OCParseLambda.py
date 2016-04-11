@@ -7,8 +7,6 @@ from BeautifulSoup import BeautifulSoup
 import datetime
 import logging
 import pymysql
-import nose-exclude
-
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 logging.info('Starting BLOTblotBLOT')
@@ -139,9 +137,9 @@ def crimeParser(db, response, city):
             # Check to see if the incident we are processing is already in the db
             exist = db.query('SELECT CaseNumber FROM Incidents WHERE CaseNumber=:CaseNum', CaseNum=CaseNum)
             exist = exist.all(as_dict=True)
-            print('checking the db to see if %s exsists, got %s' %(CaseNum, exist))
+            logger.debug('checking the db to see if %s exsists, got %s' %(CaseNum, exist))
             if not exist:
-                print('Case number not in DB')
+                logger.debug('Case number not in DB')
                 # Arrest parsing
                 if 'Arrest Info' in Description:
                     logging.debug('subject in case Number: %s arrested' % CaseNum)
@@ -298,19 +296,13 @@ print('Loading function')
 
 
 def lambda_handler(event, context):
-    print('lambda event = %s' %event)
-
-    #print("Received event: " + json.dumps(event, indent=2))
-    #print("value1 = " + event['key1'])
-    #print("value2 = " + event['key2'])
-    #print("value3 = " + event['key3'])
-    #return event['key1']  # Echo back the first key value
-    #raise Exception('Something went wrong')
-    #databaseupdate(db)
-    webpage = getWebpages('AN')
+    print('lambda event = %s' % event)
+    parserCity = event[u'city']
+    print ("recived %s as the city" % cityList[parserCity])
+    webpage = getWebpages(parserCity)
     #for response, city in zip(webpages, cityIndex):
     #    crimeParser(db, response, city)
-    crimeParser(db, webpage, 'AN')
+    crimeParser(db, webpage, parserCity)
 #    db.close()
 
 

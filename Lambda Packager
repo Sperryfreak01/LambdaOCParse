@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+import os
+import zipfile
+import boto3
+from boto.s3.connection import S3Connection
+
+
+conn = S3Connection()
+lambdaclient = boto3.client('lambda')
+s3bucket = 'blotblotblot'
+s3key = 'OCParser/Script/OCLambda.zip'
+s3 = boto3.resource('s3')
+
+def zipfiles(source_folder, destination_name):
+    source_folder = os.path.abspath(source_folder)
+    destination_path = os.path.abspath(destination_name)
+
+    try:
+        with zipfile.ZipFile(destination_name, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for dirname, subdirs, files in os.walk(source_folder):
+                # zf.write(dirname) # not needed
+                for filename in files:
+                    absname = os.path.abspath(os.path.join(dirname, filename))
+                    arcname = absname[len(source_folder) + 1:]
+                    #print os.path.join(dirname, filename)
+                    filepath = os.path.join(dirname, filename)
+                    if filepath != destination_path:
+                        zf.write(filepath,arcname)
+    except Exception as e:
+        print(e)
+
+if __name__ == '__main__':
+    zipfiles(os.getcwd(), 'OCLambda.zip')
+    s3.meta.client.upload_file('OCLambda.zip', s3bucket, s3key)
+    response = lambdaclient.update_function_code(
+                                                FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParseCordinator',
+                                                S3Bucket=s3bucket,
+                                                S3Key=s3key
+                                                )
+    response = lambdaclient.update_function_code(
+                                                FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParser',
+                                                S3Bucket=s3bucket,
+                                                S3Key=s3key
+                                                )
+    response = lambdaclient.update_function_code(
+                                                FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCMapMaker',
+                                                S3Bucket=s3bucket,
+                                                S3Key=s3key
+                                                )
+
+
+    print 'https://{host}/{bucket}/{key}'.format(host=conn.server_name(), bucket=s3bucket, key=s3key)
