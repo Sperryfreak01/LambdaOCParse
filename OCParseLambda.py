@@ -1,19 +1,23 @@
 from __future__ import print_function
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.debug('Loading function')
+
+#import json
 import geocoder
 import requests  # https://github.com/kennethreitz/requests
 import records
 import sys
 from BeautifulSoup import BeautifulSoup
 import datetime
-import logging
 import pymysql
 
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
-logging.info('Starting BLOTblotBLOT')
-logger = logging.getLogger(__name__)
+
 
 db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@192.168.5.185:3306/BlotBlotBlot')
-print('db connected')
+logger.debug('db connected')
 
 
 cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
@@ -160,8 +164,20 @@ def crimeParser(db, response, city):
 
                # Logging the incident to the database
                 lat, lon, confidence = getLocation(IncidentLocation, cityList[city])
-                db.query('INSERT INTO Incidents (CaseNumber, incidentdescription, location, incidentdate,lat, lon, city, confidence, arrest) VALUES(:CaseNum,:Description, :IncidentLocation, :IncidentDate, :lat, :lon, :city, :confidence, :arrested)',
-                          CaseNum=CaseNum, Description=Description, IncidentLocation=IncidentLocation, IncidentDate=trimmeddate, lat=lat, lon=lon, city=city, confidence=confidence, arrested=arrested,)
+                try:
+                    db.query('INSERT INTO Incidents (CaseNumber, incidentdescription, location, incidentdate,lat, lon, city, confidence, arrest) VALUES(:CaseNum,:Description, :IncidentLocation, :IncidentDate, :lat, :lon, :city, :confidence, :arrested)',
+                             CaseNum=CaseNum,
+                             Description=Description,
+                             IncidentLocation=IncidentLocation,
+                             IncidentDate=trimmeddate,
+                             lat=lat,
+                             lon=lon,
+                             city=city,
+                             confidence=confidence,
+                             arrested=arrested
+                             )
+                except ValueError as e:
+                    logger.warning(e)
 
             else:
                 logger.debug('the case number already exists in the DB, case: %s, city:%s' % (CaseNum, cityList[city]))
@@ -182,14 +198,24 @@ def crimeParser(db, response, city):
             if not exist:
                 logger.debug('db has no notes')
                 logger.debug('scrapped notes say: %s' % notes)
-                db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum, note=notes)
+                try:
+                    db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum',
+                             CaseNum=noteCaseNum,
+                             note=notes)
+                except ValueError as e:
+                    logger.warning(e)
             elif exist[0]['notes'] == notes:
                 logger.debug('scrapped notes say: %s' % notes)
                 logger.debug('notes are up to date')
             else:
                 logger.debug('notes out of date')
                 logger.debug('scrapped notes say: %s \n db says: %s' % (notes, exist[0]['notes']))
-                db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum, note=notes)
+                try:
+                    db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum',
+                             CaseNum=noteCaseNum,
+                             note=notes)
+                except ValueError as e:
+                    logger.warning(e)
 
 
 def databaseupdate(db):
@@ -226,12 +252,27 @@ def arrestparse(db, casenumber):
 
     if 'ERROR - This page cannot be displayed at this time.' in soup.getText():
         logger.warning('error on page while parseing case# %s \n%s' % (casenumber, soup.getText()))
-        sql = '''INSERT INTO Arrests (casenumber, arrestname, dob, sex, race, arreststatus, height, bail, weight, hair, location,
-                 eye, occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail, :weight, :hair,
-                 :location, :eye, :occupation)
-              '''
-        db.query(sql, casenum=casenumber, name=name, dob=dob, sex=sex, race=race, status=status, height=height,
-                 bail=bail, weight=weight, hair=hair, location=location, eye=eye, occupation=occupation )
+        try:
+            db.query('''INSERT INTO Arrests (casenumber, arrestname, dob, sex, race, arreststatus, height, bail, weight, hair, location,
+                     eye, occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail, :weight, :hair,
+                     :location, :eye, :occupation)
+                     ''',
+                     casenum=casenumber,
+                     name=name,
+                     dob=dob,
+                     sex=sex,
+                     race=race,
+                     status=status,
+                     height=height,
+                     bail=bail,
+                     weight=weight,
+                     hair=hair,
+                     location=location,
+                     eye=eye,
+                     occupation=occupation
+                     )
+        except ValueError as e:
+                    logger.warning(e)
         return
 
     table = soup.find("table", cellpadding=4)
@@ -282,28 +323,37 @@ def arrestparse(db, casenumber):
 
     logger.debug('inserting new arrest info %s' % casenumber)
 
-    db.query('''INSERT INTO Arrests (casenumber, arrestname, dob, sex, race, arreststatus, height, bail, weight, hair, location,
-                 eye, occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail, :weight, :hair,
-                 :location, :eye, :occupation)
-              ''',
-             casenum=casenumber, name=name, dob=dob, sex=sex, race=race, status=status, height=height,
-             bail=bail, weight=weight, hair=hair, location=location, eye=eye, occupation=occupation )
+    try:
+        db.query('''INSERT INTO Arrests (casenumber, arrestname, dob, sex, race, arreststatus, height, bail, weight,
+                  hair, location, eye, occupation) VALUES (:casenum, :name, :dob, :sex, :race, :status, :height, :bail,
+                  :weight, :hair, :location, :eye, :occupation)''',
+                 casenum=casenumber,
+                 name=name,
+                 dob=dob,
+                 sex=sex,
+                 race=race,
+                 status=status,
+                 height=height,
+                 bail=bail,
+                 weight=weight,
+                 hair=hair,
+                 location=location,
+                 eye=eye,
+                 occupation=occupation
+                 )
+    except ValueError as e:
+                logger.warning(e)
 
     return
 
 
-print('Loading function')
-
-
 def lambda_handler(event, context):
-    print('lambda event = %s' % event)
-    parserCity = event[u'city']
-    print ("recived %s as the city" % cityList[parserCity])
+    logger.debug('lambda event = %s' % event)
+    parserCity = event[u'Records'][0][u'Sns'][u'Message']
+    logger.info ("recived %s as the city" % cityList[parserCity])
     webpage = getWebpages(parserCity)
     #for response, city in zip(webpages, cityIndex):
     #    crimeParser(db, response, city)
     crimeParser(db, webpage, parserCity)
 #    db.close()
-
-
 

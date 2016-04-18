@@ -2,14 +2,31 @@
 import os
 import zipfile
 import boto3
-from boto.s3.connection import S3Connection
+import threading
+from boto3.s3.transfer import S3Transfer
+import sys
 
-
-conn = S3Connection()
 lambdaclient = boto3.client('lambda')
 s3bucket = 'blotblotblot'
 s3key = 'OCParser/Script/OCLambda.zip'
-s3 = boto3.resource('s3')
+s3 = S3Transfer(boto3.client('s3', 'us-west-2'))
+
+class ProgressPercentage(object):
+    def __init__(self, filename):
+        self._filename = filename
+        self._size = float(os.path.getsize(filename))
+        self._seen_so_far = 0
+        self._lock = threading.Lock()
+
+    def __call__(self, bytes_amount):
+        # To simplify we'll assume this is hooked up
+        # to a single filename.
+        with self._lock:
+            self._seen_so_far += bytes_amount
+            percentage = (self._seen_so_far / self._size) * 100
+            sys.stdout.write("\r%s  %sMb / %sMb  (%.2f%%)" % (self._filename, int(self._seen_so_far/(1024*1024)), int(self._size/(1024*1024)), percentage))
+            sys.stdout.flush()
+
 
 def zipfiles(source_folder, destination_name):
     source_folder = os.path.abspath(source_folder)
@@ -17,36 +34,49 @@ def zipfiles(source_folder, destination_name):
 
     try:
         with zipfile.ZipFile(destination_name, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for dirname, subdirs, files in os.walk(r'/home/matt/LambdaOCParse/lib/python2.7/site-packages'):
+                if 'pip' not in dirname:
+                    if 'setuptools' not in dirname:
+                        if 'wheel' not in dirname:
+                            for filename in files:
+                                absname = os.path.abspath(os.path.join(dirname, filename))
+                                arcname = absname[len(r'/home/matt/LambdaOCParse/lib/python2.7/site-packages')+1:]
+                                filepath = os.path.join(dirname, filename)
+                                if filepath != destination_path:
+                                    zf.write(filepath, arcname)
             for dirname, subdirs, files in os.walk(source_folder):
-                # zf.write(dirname) # not needed
-                for filename in files:
-                    absname = os.path.abspath(os.path.join(dirname, filename))
-                    arcname = absname[len(source_folder) + 1:]
-                    #print os.path.join(dirname, filename)
-                    filepath = os.path.join(dirname, filename)
-                    if filepath != destination_path:
-                        zf.write(filepath,arcname)
+                if '.git' not in dirname:
+                    if '.idea' not in dirname:
+                        for filename in files:
+                            absname = os.path.abspath(os.path.join(dirname, filename))
+                            arcname = absname[len(source_folder) + 1:]
+                            filepath = os.path.join(dirname, filename)
+                            if filepath !=  destination_path:
+                                zf.write(filepath,arcname)
     except Exception as e:
         print(e)
 
 if __name__ == '__main__':
     zipfiles(os.getcwd(), 'OCLambda.zip')
-    s3.meta.client.upload_file('OCLambda.zip', s3bucket, s3key)
+    s3.upload_file('OCLambda.zip', s3bucket, s3key, callback=ProgressPercentage('OCLambda.zip'))
     response = lambdaclient.update_function_code(
                                                 FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParseCordinator',
                                                 S3Bucket=s3bucket,
                                                 S3Key=s3key
                                                 )
+    #print('OCParseCordinator: %s' % response)
     response = lambdaclient.update_function_code(
                                                 FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParser',
                                                 S3Bucket=s3bucket,
                                                 S3Key=s3key
                                                 )
+    #print('OCParser: %s' % response)
     response = lambdaclient.update_function_code(
                                                 FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCMapMaker',
                                                 S3Bucket=s3bucket,
                                                 S3Key=s3key
                                                 )
+    #print('OCMapMaker: %s' % response)
 
 
-    print 'https://{host}/{bucket}/{key}'.format(host=conn.server_name(), bucket=s3bucket, key=s3key)
+    #print ('\nhttps://{host}/{bucket}/{key}'.format(host=conn.server_name(), bucket=s3bucket, key=s3key))

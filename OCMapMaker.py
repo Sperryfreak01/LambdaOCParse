@@ -1,4 +1,9 @@
 from __future__ import print_function
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.debug('Loading function')
 
 import boto3
 from folium import folium
@@ -7,16 +12,6 @@ import datetime
 import folium.plugins
 import folium.element
 import cgi
-import logging
-
-
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
-logging.info('Starting BLOTblotBLOT')
-logger = logging.getLogger(__name__)
-
-db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@192.168.5.185:3306/BlotBlotBlot')
-print('db connected')
-
 
 cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
            'CS':'ORANGE COUNTY', 'CM':'COSTA MESA', 'CZ':'COTO DE CAZA', 'ON':'ORANGE COUNTY',
@@ -42,7 +37,9 @@ def arrestinfogen(arrestinfo, casenumber):
 def createMap(db, city, days=0, month=None):
     if days > 0:
         mapstartdate =  datetime.datetime.now() - datetime.timedelta(days=days)
-        mapstartdate = mapstartdate.strftime('%Y-%m-%d %H:%M')
+        #2016-02-04T23:15:00
+        mapstartdate = mapstartdate.strftime('%Y-%m-%dT%H:%M:%S')
+        logger.debug('starting date range: %s' % mapstartdate)
 
     datapoints = []
     popups = []
@@ -56,20 +53,24 @@ def createMap(db, city, days=0, month=None):
     arrestpopups = []
     arrestmarkers = []
 
-    print('creating %s day map for %s' % (days, city))
-
+    logger.info('creating %s day map for %s' % (days, city))
+    #WHERE incidentdate > :daterange AND location =:city
     #  Get all of the incidents and arrests since teh specified date
-    dbIncidents = db.query('SELECT * from Incidents WHERE "Date" > :daterange AND City=:city', daterange=mapstartdate, city=city)
+    dbIncidents = db.query('SELECT * from Incidents WHERE incidentdate > :daterange AND city =:city',
+                           daterange=mapstartdate,
+                           city=city
+                           )
     dbArrests = db.query('''SELECT Arrests.* FROM Arrests
-                            INNER JOIN Incidents ON Arrests.CaseNumber = Incidents.CaseNumber
-                            WHERE Incidents.Date > :daterange''',
+                            INNER JOIN Incidents ON Arrests.casenumber = Incidents.CaseNumber
+                            WHERE Incidents.incidentdate > :daterange''',
                             daterange =mapstartdate
                          )
-
+    logger.debug(dbIncidents.all())
     for entry in dbIncidents:
+        logger.debug('entry: %s' % entry)
         arrestnotes = ''
         arrest = False
-        if entry['Aresst'] == 1:
+        if entry and entry['arrest'] == 1:
             dbarrestinfo = arrestinfogen(dbArrests, entry['CaseNumber'])
             if dbarrestinfo is not None: #If there is a matching incident get details and assemble the html
                 arrest = True
@@ -86,12 +87,21 @@ def createMap(db, city, days=0, month=None):
                                  <dd> Hair: %s </dd>
                                  <dd> Eye: %s </dd>
                                  <dd> Occupation: %s </dd>
-                              ''' % (dbarrestinfo['Name'], dbarrestinfo['Status'], dbarrestinfo['Location'],
-                                    dbarrestinfo['Bail'], dbarrestinfo['DOB'], dbarrestinfo['Sex'], dbarrestinfo['Race'],
-                                    dbarrestinfo['Height'], dbarrestinfo['Weight'], dbarrestinfo['Hair'],
-                                    dbarrestinfo['Eye'], dbarrestinfo['Occupation'])
+                              ''' % (dbarrestinfo['arrestname'],
+                                     dbarrestinfo['arreststatus'],
+                                     dbarrestinfo['location'],
+                                     dbarrestinfo['bail'],
+                                     dbarrestinfo['dob'],
+                                     dbarrestinfo['sex'],
+                                     dbarrestinfo['race'],
+                                     dbarrestinfo['height'],
+                                     dbarrestinfo['weight'],
+                                     dbarrestinfo['hair'],
+                                     dbarrestinfo['eye'],
+                                     dbarrestinfo['occupation']
+                                     )
 
-        formatedNotes = str(entry['Notes']).replace('\r','')
+        formatedNotes = str(entry['notes']).replace('\r','')
         formatedNotes = cgi.escape(formatedNotes)
         html = '''<dl>
                    <dt><b> %s </b></dt>
@@ -101,54 +111,64 @@ def createMap(db, city, days=0, month=None):
                    <dt><b>Notes</b></dt>
                     <dd> %s </dd>
                     %s
-                 </dl>''' % (entry['Incident'], entry['CaseNumber'], entry['Date'], entry['Location'],
-                            formatedNotes, arrestnotes)
+                 </dl>''' % (entry['incidentdescription'],
+                             entry['CaseNumber'],
+                             entry['incidentdate'],
+                             entry['location'],
+                             formatedNotes,
+                             arrestnotes)
 
         iframe = folium.element.IFrame(html=html, width=500, height=300)
 
         # Create 2 different datasets, arrests and calls
         if arrest:
-            arrestdatapoints.append((entry['Lat'], entry['Lon']))
+            arrestdatapoints.append((entry['lat'], entry['lon']))
             arrestpopups.append(folium.Popup(iframe, max_width=2650))
-            if dbarrestinfo['Sex'] == 'Female':
+            if dbarrestinfo['sex'] == 'Female':
                 arrestmarkers.append(folium.Icon(color='lightred', icon='flash'))
-            elif dbarrestinfo['Sex'] == 'Male':
+            elif dbarrestinfo['sex'] == 'Male':
                 arrestmarkers.append(folium.Icon(color='blue', icon='flash'))
             else:
                 arrestmarkers.append(folium.Icon(color='lightgray', icon='flash'))
 
         else:
-            calldatapoints.append((entry['Lat'], entry['Lon']))
+            calldatapoints.append((entry['lat'], entry['lon']))
             callpopups.append(folium.Popup(iframe, max_width=2650))
             callmarkers.append(folium.Icon(color='green', icon='phone-alt'))
 
-        datapoints = [arrestdatapoints, calldatapoints]
-        popups = [arrestpopups, callpopups]
-        markers = [arrestmarkers, callmarkers]
+    datapoints = [arrestdatapoints, calldatapoints]
+    popups = [arrestpopups, callpopups]
+    markers = [arrestmarkers, callmarkers]
 
-        logger.debug('appending multiprocessing job %s' % city)
+    logger.debug('appending multiprocessing job %s' % city)
 
-        #TODO center map on city and fix zoom
-        map_osm = folium.Map(location=[33.6700, -117.7800], width='75%', height='75%')
-        for datapoint,popup,marker in zip(datapoints, popups, markers):
-            map_osm.add_children(folium.plugins.MarkerCluster(datapoint, popup, icons=marker))
-        map_osm.save('./maps/%sMap%s.html' % (city, days))
-        jobname = ('%s %sday' % (city, days))
-        s3bucket = 'blotblotblot'
-        s3key = 'OCParser/Maps/%sMap%s.html' % (city, days)
-        s3 = boto3.resource('s3')
-        s3.meta.client.upload_file('./maps/%sMap%s.html', s3bucket, s3key)
-        logger.debug('%s map complete' % city)
+    #TODO center map on city and fix zoom
+    map_osm = folium.Map(location=[33.6700, -117.7800], width='75%', height='75%')
+    for datapoint,popup,marker in zip(datapoints, popups, markers):
+        map_osm.add_children(folium.plugins.MarkerCluster(datapoint, popup, icons=marker))
+    map_osm.save('/tmp/%sMap%s.html' % (city, days))
+    logger.info('%s map complete' % city)
+
+    s3bucket = 'blotblotblot'
+    s3key = 'OCParser/Maps/%sMap%s.html' % (city, days)
+    s3 = boto3.resource('s3')
+    s3.meta.client.upload_file('/tmp/%sMap%s.html' % (city, days), s3bucket, s3key)
+    logger.info('upload complete')
+
 
 
 
 
 def lambda_handler(event, context):
-    print('lambda event = %s' % event)
+    db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@192.168.5.185:3306/BlotBlotBlot')
+    #db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@ec2-52-38-243-136.us-west-2.compute.amazonaws.com:3306/BlotBlotBlot')
+    print('db connected')
+    logger.info('lambda event = %s' % event)
     mapCity = event[u'city']
     dateRange = event[u'daterange']
-    print ("recived %s as the city" % cityList[parserCity])
-    createMap(db, mapCity, dateRange)
+    logger.info ("recived %s as the city" % cityList[mapCity])
+    createMap(db, str(mapCity), int(dateRange))
 
-
-
+#logging.basicConfig()
+#event = {'city': 'MV', 'daterange': 7}
+#lambda_handler(event, None)
