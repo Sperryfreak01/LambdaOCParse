@@ -59,24 +59,29 @@ def zipfiles(source_folder, destination_name):
 if __name__ == '__main__':
     zipfiles(os.getcwd(), 'OCLambda.zip')
     s3.upload_file('OCLambda.zip', s3bucket, s3key, callback=ProgressPercentage('OCLambda.zip'))
-    response = lambdaclient.update_function_code(
-                                                FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParseCordinator',
-                                                S3Bucket=s3bucket,
-                                                S3Key=s3key
-                                                )
+    lambdaclient.update_function_code(
+                                        FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParseCordinator',
+                                        S3Bucket=s3bucket,
+                                        S3Key=s3key
+                                        )
     #print('OCParseCordinator: %s' % response)
-    response = lambdaclient.update_function_code(
-                                                FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParser',
-                                                S3Bucket=s3bucket,
-                                                S3Key=s3key
-                                                )
+    lambdaclient.update_function_code(
+                                        FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCParser',
+                                        S3Bucket=s3bucket,
+                                        S3Key=s3key
+                                        )
     #print('OCParser: %s' % response)
-    response = lambdaclient.update_function_code(
-                                                FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCMapMaker',
-                                                S3Bucket=s3bucket,
-                                                S3Key=s3key
-                                                )
+    lambdaclient.update_function_code(
+                                        FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCMapMaker',
+                                        S3Bucket=s3bucket,
+                                        S3Key=s3key
+                                        )
     #print('OCMapMaker: %s' % response)
+    lambdaclient.update_function_code(
+                                        FunctionName='arn:aws:lambda:us-west-2:685804734565:function:OCMapCordinator',
+                                        S3Bucket=s3bucket,
+                                        S3Key=s3key
+                                        )
 
 
     #print ('\nhttps://{host}/{bucket}/{key}'.format(host=conn.server_name(), bucket=s3bucket, key=s3key))

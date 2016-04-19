@@ -12,6 +12,7 @@ import datetime
 import folium.plugins
 import folium.element
 import cgi
+import json
 
 cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
            'CS':'ORANGE COUNTY', 'CM':'COSTA MESA', 'CZ':'COTO DE CAZA', 'ON':'ORANGE COUNTY',
@@ -151,8 +152,9 @@ def createMap(db, city, days=0, month=None):
 
     s3bucket = 'blotblotblot'
     s3key = 'OCParser/Maps/%sMap%s.html' % (city, days)
+    s3field = {'ContentType': 'text/html', 'ACL': 'public-read'}
     s3 = boto3.resource('s3')
-    s3.meta.client.upload_file('/tmp/%sMap%s.html' % (city, days), s3bucket, s3key)
+    s3.meta.client.upload_file('/tmp/%sMap%s.html' % (city, days), s3bucket, s3key, ExtraArgs=s3field)
     logger.info('upload complete')
 
 
@@ -164,11 +166,14 @@ def lambda_handler(event, context):
     #db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@ec2-52-38-243-136.us-west-2.compute.amazonaws.com:3306/BlotBlotBlot')
     print('db connected')
     logger.info('lambda event = %s' % event)
-    mapCity = event[u'city']
-    dateRange = event[u'daterange']
+    snsmessage = json.loads(event[u'Records'][0][u'Sns'][u'Message'])
+    mapCity = snsmessage['city']
+    dateRange =  snsmessage['days']
     logger.info ("recived %s as the city" % cityList[mapCity])
     createMap(db, str(mapCity), int(dateRange))
+    db.close()
 
 #logging.basicConfig()
 #event = {'city': 'MV', 'daterange': 7}
+#event = {u'Records': [{u'EventVersion': u'1.0', u'EventSubscriptionArn': u'arn:aws:sns:us-west-2:685804734565:BotterMap:9fac6364-901c-44b4-bb0a-036db6dbe3fd', u'EventSource': u'aws:sns', u'Sns': {u'SignatureVersion': u'1', u'Timestamp': u'2016-04-19T04:12:30.758Z', u'Signature': u'f1DJZbWNzGdDP5GWpFOBUW0H2bRLmObl0MO44B7wskPkwTXIGy2h6ZF6yG1ni+tw8oYLnS0fBBMlPtqBSwLrHyxL7WxJ9s1BH0BDbmOCftcwqP5j3ZHeF6OGKXZ0g9Ssn3scHps2YRzzw9ItJPS3W0mVVjdyRRofupVHrjWXwm9Etzl1QgSdxZaVJdH0fOFmt4Xsz1+4SHd9cO/3Q73t/Lp6XoHyfIfajDpGVfBaJQV1KdP/0JAjtsTT2Wvo44TmY/YOghuMmLOHst9MsEOaI4v1E933zEyQk54VSXaFAL3I33za8B8T7BnyUqdCfe8kjUVfzy4gCc1WrOYrxJinvA==', u'SigningCertUrl': u'https://sns.us-west-2.amazonaws.com/SimpleNotificationService-bb750dd426d95ee9390147a5624348ee.pem', u'MessageId': u'136c761f-0e91-5b0d-af4c-3990bcffc6e4', u'Message': u'{"city": "YL", "days": 7}', u'MessageAttributes': {}, u'Type': u'Notification', u'UnsubscribeUrl': u'https://sns.us-west-2.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:us-west-2:685804734565:BotterMap:9fac6364-901c-44b4-bb0a-036db6dbe3fd', u'TopicArn': u'arn:aws:sns:us-west-2:685804734565:BotterMap', u'Subject': None}}]}
 #lambda_handler(event, None)

@@ -5,7 +5,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.debug('Loading function')
 
-#import json
+import json
 import geocoder
 import requests  # https://github.com/kennethreitz/requests
 import records
@@ -13,11 +13,6 @@ import sys
 from BeautifulSoup import BeautifulSoup
 import datetime
 import pymysql
-
-
-
-db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@192.168.5.185:3306/BlotBlotBlot')
-logger.debug('db connected')
 
 
 cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
@@ -34,29 +29,8 @@ cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 
            'YL':'YORBA LINDA'}
 
 
-def getWebpages(city):
-    logger.info('getting webpage headers')
+def getWebpages(city, ViewState, ViewStateGen, EventValidation):
     BlotterURL = 'http://ws.ocsd.org/Blotter/BlotterSearch.aspx'
-
-    r = requests.get(BlotterURL)
-
-    if r.status_code != requests.codes.ok:
-        sys.exit()
-
-    soup = BeautifulSoup(r.content)
-
-    # ASP validation and session fields
-    input_fields = soup.findAll("input", {'type':'hidden'})
-
-    for inputs in input_fields:  # gets the form validation variables the server presents, needed for submitting the form
-        if inputs['id'] == '__VIEWSTATE':
-            ViewState = inputs['value']
-
-        if inputs['id'] == '__VIEWSTATEGENERATOR':
-            ViewStateGen = inputs['value']
-
-        if inputs['id'] == '__EVENTVALIDATION':
-            EventValidation = inputs['value']
 
     headers = {
         'accept': "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -74,20 +48,23 @@ def getWebpages(city):
         }
 
     payload ={'SortBy': '',
+               '__EVENTVALIDATION': EventValidation,
+               '__VIEWSTATE': ViewState,
+               '__VIEWSTATEGENERATOR': ViewStateGen,
                '__EVENTARGUMENT': '',
                '__EVENTTARGET': '',
-               '__EVENTVALIDATION': EventValidation,
                '__SCROLLPOSITIONX': '0',
                '__SCROLLPOSITIONY': '0',
-               '__VIEWSTATE': ViewState,
-                '__VIEWSTATEGENERATOR': ViewStateGen,
                'btn7Days.x': '15',
                'btn7Days.y': '8',
                'ddlCity': city
                 }
 
-    logger.info('getting webpage headers')
+    logger.info('getting webpage')
     response = requests.post(BlotterURL, data=payload, headers=headers)
+    print (response)
+    #if response.status_code != requests.codes.ok:
+        #TODO close db on failures to reduce connecction count
     #responses = grequests.map(request)
     logger.info('got the webpage for %s' % city)
     return response
@@ -348,12 +325,18 @@ def arrestparse(db, casenumber):
 
 
 def lambda_handler(event, context):
+    db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@192.168.5.185:3306/BlotBlotBlot')
+    #db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@ec2-52-38-243-136.us-west-2.compute.amazonaws.com:3306/BlotBlotBlot')
+    logger.debug('db connected')
     logger.debug('lambda event = %s' % event)
-    parserCity = event[u'Records'][0][u'Sns'][u'Message']
+    snsmessage = json.loads(event[u'Records'][0][u'Sns'][u'Message'])
+    parserCity = snsmessage['city']
+    ViewState = snsmessage['viewstate']
+    ViewStateGen = snsmessage['viewstategen']
+    EventValidation = snsmessage['eventvalidation']
     logger.info ("recived %s as the city" % cityList[parserCity])
-    webpage = getWebpages(parserCity)
-    #for response, city in zip(webpages, cityIndex):
-    #    crimeParser(db, response, city)
+    webpage = getWebpages(parserCity, ViewState, ViewStateGen, EventValidation)
     crimeParser(db, webpage, parserCity)
-#    db.close()
+    db.close()
 
+#lambda_handler(None, None)
