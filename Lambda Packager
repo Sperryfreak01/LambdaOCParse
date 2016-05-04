@@ -82,6 +82,11 @@ if __name__ == '__main__':
                                         S3Bucket=s3bucket,
                                         S3Key=s3key
                                         )
+    lambdaclient.update_function_code(
+                                        FunctionName='arn:aws:lambda:us-west-2:685804734565:function:DBqueue',
+                                        S3Bucket=s3bucket,
+                                        S3Key=s3key
+                                        )
 
 
     #print ('\nhttps://{host}/{bucket}/{key}'.format(host=conn.server_name(), bucket=s3bucket, key=s3key))

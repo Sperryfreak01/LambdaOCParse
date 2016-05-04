@@ -13,6 +13,7 @@ import sys
 from BeautifulSoup import BeautifulSoup
 import datetime
 import pymysql
+import boto3
 
 
 cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
@@ -61,11 +62,11 @@ def getWebpages(city, ViewState, ViewStateGen, EventValidation):
                 }
 
     logger.info('getting webpage')
-    response = requests.post(BlotterURL, data=payload, headers=headers)
-    print (response)
-    #if response.status_code != requests.codes.ok:
-        #TODO close db on failures to reduce connecction count
-    #responses = grequests.map(request)
+    try:
+        response = requests.post(BlotterURL, data=payload, headers=headers, timeout=10)
+    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.HTTPError) as e:
+        logger.warning(e)
+        return -1
     logger.info('got the webpage for %s' % city)
     return response
 
@@ -87,9 +88,10 @@ def getLocation(textLocation, city):
 
 
 def crimeParser(db, response, city):
+    sqs = boto3.resource('sqs')
+    queue = sqs.get_queue_by_name(QueueName='Incidents')
     logger.info('Parsing through %s' % city)
     getNotes = False
-    noteCaseNum = ''
 
     try:
         soup = BeautifulSoup(response.content)
@@ -105,6 +107,7 @@ def crimeParser(db, response, city):
     rows = table.findAll("tr")
 
     for row in rows:
+        arrested = trimmeddate = Description = IncidentLocation = lat = lon = confidence = notes = ''
         # Stepping through the incident table and parsing each row
         if row.attrs[0] == (u'class', u'trEven') or row.attrs[0] == (u'class', u'trOdd'):
             cells = row.findAll("td")
@@ -114,85 +117,47 @@ def crimeParser(db, response, city):
             CaseNum = cells[2].getText()
             Description = cells[3].getText().replace("&nbsp;", "")  # get rid of the pesky web formating
             IncidentLocation = cells[4].getText()
-
-            # Check to see if the incident we are processing is already in the db
-            exist = db.query('SELECT CaseNumber FROM Incidents WHERE CaseNumber=:CaseNum', CaseNum=CaseNum)
-            exist = exist.all(as_dict=True)
-            logger.debug('checking the db to see if %s exsists, got %s' %(CaseNum, exist))
-            if not exist:
-                logger.debug('Case number not in DB')
-                # Arrest parsing
-                if 'Arrest Info' in Description:
-                    logging.debug('subject in case Number: %s arrested' % CaseNum)
-                    #arrestparse(db, CaseNum)
-                    arrested = 1
-                else:
-                    arrested = 0
-                    logging.debug('No arrest in case Number: %s' % CaseNum)
-
-                if cells[5].getText().replace("&nbsp;", "") == 'read':  # seeing if we need to check for updated notes
-                    logger.debug('Case number: %s has notes' % CaseNum)
-                    getNotes = True  # Since there are notes we set the flag to get the notes, stored in next row
-                    noteCaseNum = CaseNum
-                else:
-                    logger.debug('Case number: %s does not have notes' % CaseNum)
-                    getNotes = False  # No notes, no flag, don't need the next row
-                logger.debug('Found a new incident %s' % CaseNum)
-
-               # Logging the incident to the database
-                lat, lon, confidence = getLocation(IncidentLocation, cityList[city])
-                try:
-                    db.query('INSERT INTO Incidents (CaseNumber, incidentdescription, location, incidentdate,lat, lon, city, confidence, arrest) VALUES(:CaseNum,:Description, :IncidentLocation, :IncidentDate, :lat, :lon, :city, :confidence, :arrested)',
-                             CaseNum=CaseNum,
-                             Description=Description,
-                             IncidentLocation=IncidentLocation,
-                             IncidentDate=trimmeddate,
-                             lat=lat,
-                             lon=lon,
-                             city=city,
-                             confidence=confidence,
-                             arrested=arrested
-                             )
-                except ValueError as e:
-                    logger.warning(e)
-
+            # Logging the incident to the database
+            #lat, lon, confidence = getLocation(IncidentLocation, cityList[city])
+            if 'Arrest Info' in Description:
+                logging.info('subject in case Number: %s arrested' % CaseNum)
+                #arrestparse(db, CaseNum)
+                arrested = 1
             else:
-                logger.debug('the case number already exists in the DB, case: %s, city:%s' % (CaseNum, cityList[city]))
-                if cells[5].getText().replace("&nbsp;", "") == 'read':  # seeing if we need to check for updated notes
-                    logger.debug('Case number: %s has notes' % CaseNum)
-                    getNotes = True  # Since there are notes we set the flag to get the notes, stored in next row
-                    noteCaseNum = CaseNum
-                else:
-                    logger.debug('Case number: %s does not have notes' % CaseNum)
-                    getNotes = False  # No notes, no flag, don't need the next row.
+                arrested = 0
+                logging.debug('No arrest in case Number: %s' % CaseNum)
+
+            incident = {'type': 'incident',
+                        'CaseNum': CaseNum,
+                        'Description': Description,
+                        'IncidentLocation': IncidentLocation,
+                        'IncidentDate': trimmeddate,
+                        'city': city,
+                        'arrested': arrested
+                        }
+            response = queue.send_message(MessageBody=json.dumps(incident))
+            logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+
+            if cells[5].getText().replace("&nbsp;", "") == 'read':  # seeing if we need to check for updated notes
+                logger.debug('Case number: %s has notes' % CaseNum)
+                getNotes = True  # Since there are notes we set the flag to get the notes, stored in next row
+                noteCaseNum = CaseNum
+            else:
+                logger.debug('Case number: %s does not have notes' % CaseNum)
+                getNotes = False  # No notes, no flag, don't need the next row
+
 
         # Parsing through the notes if a note row exits and it was flagged for logging
         if row.attrs[0] == (u'id', u'trNotes') and getNotes:
-            #cells = row.findAll("td")
             notes = row.getText()
-            exist = db.query('SELECT notes FROM Incidents WHERE CaseNumber=:CaseNum', CaseNum=noteCaseNum)
-            exist = exist.all(as_dict=True)
-            if not exist:
-                logger.debug('db has no notes')
-                logger.debug('scrapped notes say: %s' % notes)
-                try:
-                    db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum',
-                             CaseNum=noteCaseNum,
-                             note=notes)
-                except ValueError as e:
-                    logger.warning(e)
-            elif exist[0]['notes'] == notes:
-                logger.debug('scrapped notes say: %s' % notes)
-                logger.debug('notes are up to date')
-            else:
-                logger.debug('notes out of date')
-                logger.debug('scrapped notes say: %s \n db says: %s' % (notes, exist[0]['notes']))
-                try:
-                    db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum',
-                             CaseNum=noteCaseNum,
-                             note=notes)
-                except ValueError as e:
-                    logger.warning(e)
+
+            incident = {'type': 'notes',
+                        'CaseNum': CaseNum,
+                        'notes': notes
+                        }
+            response = queue.send_message(MessageBody=json.dumps(incident))
+            logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+
 
 
 def databaseupdate(db):
@@ -266,6 +231,8 @@ def arrestparse(db, casenumber):
             # logger.debug( '%s, \n%s' % (cell.getText(), next))
             if cell.getText() == "Date of Birth:":
                  dob = next.getText().replace("&nbsp;", "")
+                 date_object = datetime.datetime.strptime(dob, '%m-%d-%Y')
+                 dob = date_object.strftime('%Y-%m-%d')
                  logger.debug('%s %s' % (cell.getText(), next.getText().replace("&nbsp;", "")))
             if cell.getText() == "Sex:":
                  sex = next.getText().replace("&nbsp;", "")
@@ -280,8 +247,9 @@ def arrestparse(db, casenumber):
                 height  = next.getText().replace("&nbsp;", "")
                 logger.debug('%s %s' % (cell.getText(), next.getText().replace("&nbsp;", "")))
             if cell.getText() == "Bail Amount:":
-                bail = next.getText().replace("&nbsp;", "")
-                logger.debug('%s %s' % (cell.getText(), next.getText().replace("&nbsp;", "")))
+                bail = next.getText().replace('$', '').replace(',', '').split('.')
+                bail =int(bail[0])
+                logger.debug('%s %s' % (cell.getText(), next.getText().replace("&nbsp;", "").replace('$', '').replace(',', '')))
             if cell.getText() == "Weight:":
                 weight = next.getText().replace("&nbsp;", "")
                 logger.debug('%s %s' % (cell.getText(), next.getText().replace("&nbsp;", "")))
@@ -336,7 +304,9 @@ def lambda_handler(event, context):
     EventValidation = snsmessage['eventvalidation']
     logger.info ("recived %s as the city" % cityList[parserCity])
     webpage = getWebpages(parserCity, ViewState, ViewStateGen, EventValidation)
-    crimeParser(db, webpage, parserCity)
+    if webpage != -1:
+        crimeParser(db, webpage, parserCity)
     db.close()
 
 #lambda_handler(None, None)
+
