@@ -8,12 +8,12 @@ import sys
 from BeautifulSoup import BeautifulSoup
 from time import sleep
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
 
 
 def startParser():
-    cityList = {'MV':'MISSION VIEJO'}
-    cityback = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
+    #cityList = {'DP':'DANA POINT'}
+    cityList = {'AV':'ALISO VIEJO', 'AN':'ANAHEIM', 'BR':'BREA', 'BP':'BUENA PARK', 'CN':'ORANGE COUNTY',
            'CS':'ORANGE COUNTY', 'CM':'COSTA MESA', 'CZ':'COTO DE CAZA', 'ON':'ORANGE COUNTY',
            'OS':'ORANGE COUNTY', 'CY':'CYPRESS', 'DP':'DANA POINT', 'DH':'DANA POINT', 'FA':'ORANGE COUNTY',
            'FV':'FOUNTAIN VALLEY', 'FU':'FULLERTON', 'GG':'GARDEN GROVE', 'HB':'HUNTINGTON BEACH', 'IR':'IRVINE',
@@ -67,7 +67,7 @@ def startParser():
                 Message=payload
                 )
         logger.debug('lambda status: %s' % response)
-        sleep(2)
+        sleep(1)
 
 def lambda_handler(event, context):
     logger.info('Starting OC Parser Cordinator')

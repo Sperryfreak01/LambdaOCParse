@@ -2,8 +2,9 @@ from __future__ import print_function
 import logging
 
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 logger.debug('Loading function')
+
 
 import json
 import requests  # https://github.com/kennethreitz/requests
@@ -14,10 +15,12 @@ import datetime
 import pymysql
 import boto3
 
+sqs = boto3.resource('sqs')
+
 
 def processQueue(context):
     db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@192.168.5.185:3306/BlotBlotBlot')
-    sqs = boto3.resource('sqs')
+    #sqs = boto3.resource('sqs')
     queue = sqs.get_queue_by_name(QueueName='Incidents')
     retry_counter = 6
     while context.get_remaining_time_in_millis() > 30000 and retry_counter > 0:
@@ -37,7 +40,7 @@ def processQueue(context):
         # messages_to_delete list will be empty
         if len(messages_to_delete) == 0:
             retry_counter -= 1
-            print ('retries left: %s' % retry_counter)
+            logger.debug('retries left: %s' % retry_counter)
         # delete messages to remove them from SQS queue
         # handle any errors
         else:
@@ -46,45 +49,67 @@ def processQueue(context):
     db.close()
 
 
-def dbUpdate(db, messages):
-    for message in messages:
-        logger.debug ('%s' % (message))
-        if message[u'type'] == u'incident':
-            print ('incident')
-            try:
 
-                db.query('INSERT INTO Incidents (CaseNumber, incidentdescription, location, incidentdate,lat, lon, city, confidence, arrest) VALUES(:CaseNum,:Description, :IncidentLocation, :IncidentDate, :lat, :lon, :city, :confidence, :arrested)',
+def getLocation(textLocation, city):
+    textLocation = ('%s %s CA') % (textLocation.replace("//", " and "), city)
+    #logger.debug(textLocation)
+    g = geocoder.google(textLocation, key='AIzaSyAjPgRQbIeHjaOX7FT8lap0r6M2TRHsZyw')
+    if g.json['ok'] == True:
+        splitedLat = str.split(str(g.json['lat']), '.')
+        joinedLat = '%s.%s' %(splitedLat[0],splitedLat[1][:5])  # truncate the lat to 5 decimal points
+
+        splitedLon = str.split(str(g.json['lng']), '.')
+        joinedLon = '%s.%s' %(splitedLon[0],splitedLon[1][:5])  # truncate the long to 5 decimal points
+        return joinedLat, joinedLon, g.json['confidence']
+    else:
+        logger.warning('Unable to geocode incident location: %s' % g.json)
+        return 37.8267, -122.4233, -1
+
+
+def dbUpdate(db, messages):
+    geolocationqueue = sqs.get_queue_by_name(QueueName='GeoLocation')
+    for message in messages:
+        #logger.debug ('%s' % (message))
+        if message[u'type'] == u'incident':
+            geoLookup = False
+            try:
+                db.query('INSERT INTO Incidents (CaseNumber, incidentdescription, location, incidentdate, city, arrest) VALUES(:CaseNum,:Description, :IncidentLocation, :IncidentDate, :city, :arrested)',
                          CaseNum=message[u'CaseNum'],
                          Description=message[u'Description'],
                          IncidentLocation=message[u'IncidentLocation'],
                          IncidentDate=message[u'IncidentDate'],
-                         lat=message[u'lat'],
-                         lon=message[u'lon'],
                          city=message[u'city'],
-                         confidence=message[u'confidence'],
                          arrested=message[u'arrested']
                          )
+                geoLookup = True
+
             except ValueError as e:
                 logger.warning(e)
+
 
             except records.IntegrityError as e:
-                print ('got an integrity error from records')
-                print (e)
+                logger.debug('got an integrity error from records %s' % e)
 
+            if geoLookup:
+                incident = {'type': 'Location',
+                            'CaseNum': message[u'CaseNum'],
+                            'IncidentLocation': message[u'IncidentLocation'],
+                            'city': message[u'city']
+                            }
+                logger.debug("adding location to queue %s" % json.dumps(incident))
+                response = geolocationqueue.send_message(MessageBody=json.dumps(incident))
+                logger.debug(response)
+
+            else:
+                logger.debug("incident exsisted no need to geolocate")
 
         if message[u'type'] == u'notes':
-            print ('notes')
-            return
             try:
                 db.query('UPDATE Incidents SET notes=:note WHERE CaseNumber=:CaseNum',
-                         CaseNum=noteCaseNum,
-                         note=notes)
+                         CaseNum=message[u'CaseNum'],
+                         note=message[u'notes'])
             except ValueError as e:
                 logger.warning(e)
-
-
-
-
 
 
 def arrestparse(db, casenumber):
@@ -203,16 +228,4 @@ def arrestparse(db, casenumber):
 
 
 def lambda_handler(event, context):
-    print ('event - %s' % event)
-    print ('context - %s' % context)
-    #db = records.Database('mysql+pymysql://Sperryfreak01:Matthdl13@ec2-52-38-243-136.us-west-2.compute.amazonaws.com:3306/BlotBlotBlot')
-    #logger.debug('db connected')
-    #logger.debug('lambda event = %s' % event)
     processQueue(context)
-    #crimeParser(db, webpage, parserCity)
-    #sqs = boto3.client('sqs')
-    #message = response = sqs.receive_message(QueueUrl='https://sqs.us-west-2.amazonaws.com/685804734565/Incidents',)
-    #print (message)
-
-
-#lambda_handler(None, None)

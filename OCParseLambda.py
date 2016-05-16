@@ -2,7 +2,7 @@ from __future__ import print_function
 import logging
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
 logger.debug('Loading function')
 
 import json
@@ -71,21 +71,6 @@ def getWebpages(city, ViewState, ViewStateGen, EventValidation):
     return response
 
 
-def getLocation(textLocation, city):
-    textLocation = ('%s %s CA') % (textLocation.replace("//", " and "), city)
-    #logger.debug(textLocation)
-    g = geocoder.google(textLocation, key='AIzaSyAjPgRQbIeHjaOX7FT8lap0r6M2TRHsZyw')
-    if g.json['ok'] == True:
-        splitedLat = str.split(str(g.json['lat']), '.')
-        joinedLat = '%s.%s' %(splitedLat[0],splitedLat[1][:5])  # truncate the lat to 5 decimal points
-
-        splitedLon = str.split(str(g.json['lng']), '.')
-        joinedLon = '%s.%s' %(splitedLon[0],splitedLon[1][:5])  # truncate the long to 5 decimal points
-        return joinedLat, joinedLon, g.json['confidence']
-    else:
-        logger.warning('Unable to geocode incident location: %s' % g.json)
-        return 37.8267, -122.4233, -1
-
 
 def crimeParser(db, response, city):
     sqs = boto3.resource('sqs')
@@ -105,7 +90,8 @@ def crimeParser(db, response, city):
     # Arrest info is scrapped from a second webpage when there is "Arrest Info" in the Incident column
     table = soup.find("table", cellpadding=4)
     rows = table.findAll("tr")
-
+    incidents = []
+    sqsnotes = []
     for row in rows:
         arrested = trimmeddate = Description = IncidentLocation = lat = lon = confidence = notes = ''
         # Stepping through the incident table and parsing each row
@@ -135,8 +121,12 @@ def crimeParser(db, response, city):
                         'city': city,
                         'arrested': arrested
                         }
-            response = queue.send_message(MessageBody=json.dumps(incident))
-            logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+            if len(incidents) < 10:
+                incidents.append({'Id': str(len(incidents)+1), 'MessageBody': json.dumps(incident)})
+            else:
+                response = queue.send_messages(Entries=incidents)
+                logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+                incidents[:] = []
 
             if cells[5].getText().replace("&nbsp;", "") == 'read':  # seeing if we need to check for updated notes
                 logger.debug('Case number: %s has notes' % CaseNum)
@@ -151,14 +141,21 @@ def crimeParser(db, response, city):
         if row.attrs[0] == (u'id', u'trNotes') and getNotes:
             notes = row.getText()
 
-            incident = {'type': 'notes',
-                        'CaseNum': CaseNum,
-                        'notes': notes
-                        }
-            response = queue.send_message(MessageBody=json.dumps(incident))
-            logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+            note = {'type': 'notes',
+                    'CaseNum': CaseNum,
+                    'notes': notes
+                    }
+            if len(sqsnotes) < 10:
+                sqsnotes.append({'Id': str(len(incidents)+1), 'MessageBody': json.dumps(note)})
+            else:
+                response = queue.send_messages(Entries=sqsnotes)
+                logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+                sqsnotes[:] = []
 
-
+    response = queue.send_messages(Entries=incident)
+    logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+    response = queue.send_messages(Entries=sqsnotes)
+    logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
 
 def databaseupdate(db):
     webpages, cityIndex  = getWebpages()
@@ -307,6 +304,90 @@ def lambda_handler(event, context):
     if webpage != -1:
         crimeParser(db, webpage, parserCity)
     db.close()
+    logger.debug('db closed')
+
 
 #lambda_handler(None, None)
 
+[
+    {"MessageBody": {"city": "RO",
+                     "Description": "SUSPICIOUS VEHICLE",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-15 19:11",
+                     "CaseNum": "16-117589",
+                     "IncidentLocation": "12600 BLK SILVER FOX RD",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "BURGLARY ALARM-AUDIBLE",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-15 16:14",
+                     "CaseNum": "16-117470",
+                     "IncidentLocation": "3000 BLK KITTRICK DR",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "ROBBERY ALARM-AUDIBLE",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-15 10:15",
+                     "CaseNum": "16-117242",
+                     "IncidentLocation": "12300 BLK FOSTER RD",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "PATROL CHECK",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-15 05:42",
+                     "CaseNum": "16-117139",
+                     "IncidentLocation": "LOS ALAMITOS BLVD // HEDWIG RD",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "SUSPICIOUS PERSON/CIRCS",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-14 22:56",
+                     "CaseNum": "16-116950",
+                     "IncidentLocation": "12500 BLK KENSINGTON RD",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "SUSPICIOUS PERSON IN VEH",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-14 22:06",
+                     "CaseNum": "16-116886",
+                     "IncidentLocation": "ST CLOUD DR // SEAL BEACH BLVD",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "SUSPICIOUS PERSON/CIRCS",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-14 16:40",
+                     "CaseNum": "16-116675",
+                     "IncidentLocation": "HEDWIG RD // LOS ALAMITOS BLVD",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "BURGLARY REPORT",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-14 11:54",
+                     "CaseNum": "16-116483",
+                     "IncidentLocation": "3300 BLK DRUID LN",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "DISTURBANCE",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-14 11:50",
+                     "CaseNum": "16-116479",
+                     "IncidentLocation": "11100 BLK LOS ALAMITOS BLVD",
+                     "type": "incident"}
+     },
+    {"MessageBody": {"city": "RO",
+                     "Description": "DISTURBANCE",
+                     "arrested": 0,
+                     "IncidentDate": "2016-05-13 23:44",
+                     "CaseNum": "16-116137",
+                     "IncidentLocation": "11000 BLK LOS ALAMITOS BLVD",
+                     "type": "incident"}
+     }
+]
