@@ -97,36 +97,39 @@ def crimeParser(db, response, city):
         # Stepping through the incident table and parsing each row
         if row.attrs[0] == (u'class', u'trEven') or row.attrs[0] == (u'class', u'trOdd'):
             cells = row.findAll("td")
+            CaseNum = cells[2].getText()
             IncidentDate = cells[0].getText()
             date_object = datetime.datetime.strptime(IncidentDate, '%m/%d/%Y %I:%M:%S %p')
-            trimmeddate = date_object.strftime('%Y-%m-%d %H:%M')  # convert to a format that is easier to search for
-            CaseNum = cells[2].getText()
-            Description = cells[3].getText().replace("&nbsp;", "")  # get rid of the pesky web formating
-            IncidentLocation = cells[4].getText()
-            # Logging the incident to the database
-            #lat, lon, confidence = getLocation(IncidentLocation, cityList[city])
-            if 'Arrest Info' in Description:
-                logging.info('subject in case Number: %s arrested' % CaseNum)
-                #arrestparse(db, CaseNum)
-                arrested = 1
-            else:
-                arrested = 0
-                logging.debug('No arrest in case Number: %s' % CaseNum)
 
-            incident = {'type': 'incident',
-                        'CaseNum': CaseNum,
-                        'Description': Description,
-                        'IncidentLocation': IncidentLocation,
-                        'IncidentDate': trimmeddate,
-                        'city': city,
-                        'arrested': arrested
-                        }
-            if len(incidents) < 10:
-                incidents.append({'Id': str(len(incidents)+1), 'MessageBody': json.dumps(incident)})
-            else:
-                response = queue.send_messages(Entries=incidents)
-                logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
-                incidents[:] = []
+            if date_object > datetime.datetime.now()-datetime.timedelta(hours=13):
+                trimmeddate = date_object.strftime('%Y-%m-%d %H:%M')  # convert to a format that is easier to search for
+                Description = cells[3].getText().replace("&nbsp;", "")  # get rid of the pesky web formating
+                IncidentLocation = cells[4].getText()
+                # Logging the incident to the database
+                #lat, lon, confidence = getLocation(IncidentLocation, cityList[city])
+
+                if 'Arrest Info' in Description:
+                    logging.info('subject in case Number: %s arrested' % CaseNum)
+                    #arrestparse(db, CaseNum)
+                    arrested = 1
+                else:
+                    arrested = 0
+                    logging.debug('No arrest in case Number: %s' % CaseNum)
+
+                incident = {'type': 'incident',
+                            'CaseNum': CaseNum,
+                            'Description': Description,
+                            'IncidentLocation': IncidentLocation,
+                            'IncidentDate': trimmeddate,
+                            'city': city,
+                            'arrested': arrested
+                            }
+                if len(incidents) < 10:
+                    incidents.append({'Id': str(len(incidents)+1), 'MessageBody': json.dumps(incident)})
+                else:
+                    response = queue.send_messages(Entries=incidents)
+                    logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+                    incidents[:] = []
 
             if cells[5].getText().replace("&nbsp;", "") == 'read':  # seeing if we need to check for updated notes
                 logger.debug('Case number: %s has notes' % CaseNum)
@@ -139,23 +142,24 @@ def crimeParser(db, response, city):
 
         # Parsing through the notes if a note row exits and it was flagged for logging
         if row.attrs[0] == (u'id', u'trNotes') and getNotes:
-            notes = row.getText()
+            if date_object > datetime.datetime.now()-datetime.timedelta(hours=42):
+                notes = row.getText()
 
-            note = {'type': 'notes',
-                    'CaseNum': CaseNum,
-                    'notes': notes
-                    }
-            if len(sqsnotes) < 10:
-                sqsnotes.append({'Id': str(len(incidents)+1), 'MessageBody': json.dumps(note)})
-            else:
-                response = queue.send_messages(Entries=sqsnotes)
-                logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
-                sqsnotes[:] = []
+                note = {'type': 'notes',
+                        'CaseNum': CaseNum,
+                        'notes': notes
+                        }
+                if len(sqsnotes) < 10:
+                    sqsnotes.append({'Id': str(len(sqsnotes)+1), 'MessageBody': json.dumps(note)})
+                else:
+                    response = queue.send_messages(Entries=sqsnotes)
+                    logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+                    sqsnotes[:] = []
 
-    response = queue.send_messages(Entries=incident)
-    logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
-    response = queue.send_messages(Entries=sqsnotes)
-    logger.debug('queued casenumber: %s \n%s' % (CaseNum, response))
+    if len(incidents):
+        queue.send_messages(Entries=incidents)
+    if len(sqsnotes):
+        queue.send_messages(Entries=sqsnotes)
 
 def databaseupdate(db):
     webpages, cityIndex  = getWebpages()
@@ -308,86 +312,3 @@ def lambda_handler(event, context):
 
 
 #lambda_handler(None, None)
-
-[
-    {"MessageBody": {"city": "RO",
-                     "Description": "SUSPICIOUS VEHICLE",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-15 19:11",
-                     "CaseNum": "16-117589",
-                     "IncidentLocation": "12600 BLK SILVER FOX RD",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "BURGLARY ALARM-AUDIBLE",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-15 16:14",
-                     "CaseNum": "16-117470",
-                     "IncidentLocation": "3000 BLK KITTRICK DR",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "ROBBERY ALARM-AUDIBLE",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-15 10:15",
-                     "CaseNum": "16-117242",
-                     "IncidentLocation": "12300 BLK FOSTER RD",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "PATROL CHECK",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-15 05:42",
-                     "CaseNum": "16-117139",
-                     "IncidentLocation": "LOS ALAMITOS BLVD // HEDWIG RD",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "SUSPICIOUS PERSON/CIRCS",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-14 22:56",
-                     "CaseNum": "16-116950",
-                     "IncidentLocation": "12500 BLK KENSINGTON RD",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "SUSPICIOUS PERSON IN VEH",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-14 22:06",
-                     "CaseNum": "16-116886",
-                     "IncidentLocation": "ST CLOUD DR // SEAL BEACH BLVD",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "SUSPICIOUS PERSON/CIRCS",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-14 16:40",
-                     "CaseNum": "16-116675",
-                     "IncidentLocation": "HEDWIG RD // LOS ALAMITOS BLVD",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "BURGLARY REPORT",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-14 11:54",
-                     "CaseNum": "16-116483",
-                     "IncidentLocation": "3300 BLK DRUID LN",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "DISTURBANCE",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-14 11:50",
-                     "CaseNum": "16-116479",
-                     "IncidentLocation": "11100 BLK LOS ALAMITOS BLVD",
-                     "type": "incident"}
-     },
-    {"MessageBody": {"city": "RO",
-                     "Description": "DISTURBANCE",
-                     "arrested": 0,
-                     "IncidentDate": "2016-05-13 23:44",
-                     "CaseNum": "16-116137",
-                     "IncidentLocation": "11000 BLK LOS ALAMITOS BLVD",
-                     "type": "incident"}
-     }
-]
